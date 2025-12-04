@@ -1,0 +1,29 @@
+[
+  {
+    "url": "amqp://guest:guest@localhost:5672",
+    "criteria": {
+      "children": [
+        {
+          "path": "value.wee",
+          "operand": "==",
+          "value": 67
+        },
+        {
+          "path": "value.weer",
+          "operand": "==",
+          "value": 64
+        },
+        {
+          "isNegated": true,
+          "children": [
+            {
+              "path": "type",
+              "operand": "==",
+              "value": "test"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]
