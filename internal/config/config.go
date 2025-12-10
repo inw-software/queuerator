@@ -338,11 +338,7 @@ func (cg CriteriaGroup) Evaluate(obj map[string]any) bool {
 }
 
 type DataSource interface {
-	Connect(ctx context.Context) error
+	Connect(ctx context.Context, msg chan json.RawMessage) error
 }
 
-type DataSourceConfig interface {
-	CreateDataSource() (DataSource, error)
-}
-
-type Config []DataSourceConfig
+type Config []DataSource

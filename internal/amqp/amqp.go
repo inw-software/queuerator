@@ -10,29 +10,29 @@ import (
 	"inwsoft.com/queuerator/internal/config"
 )
 
-type AMQPDataSourceConfig struct {
+type amqpConfig struct {
 	Url      string               `json:"url"`
 	Criteria config.CriteriaGroup `json:"criteria"`
 }
 
-var _ config.DataSourceConfig = (*AMQPDataSourceConfig)(nil)
-
-func (c AMQPDataSourceConfig) CreateDataSource() (config.DataSource, error) {
-	return amqpDataSource{
-		url:      c.Url,
-		criteria: c.Criteria,
-	}, nil
-}
-
 type amqpDataSource struct {
-	url      string
-	criteria config.CriteriaGroup
+	config amqpConfig
 }
 
 var _ config.DataSource = amqpDataSource{}
 
-func (src amqpDataSource) Connect(ctx context.Context) error {
-	conn, err := amqplib.Dial(ctx, src.url, nil)
+func New(a json.RawMessage) (config.DataSource, error) {
+	src := amqpDataSource{}
+	err := json.Unmarshal(a, &src.config)
+	if err != nil {
+		return nil, err
+	}
+
+	return src, nil
+}
+
+func (src amqpDataSource) Connect(ctx context.Context, msgChan chan json.RawMessage) error {
+	conn, err := amqplib.Dial(ctx, src.config.Url, nil)
 	if err != nil {
 		return err
 	}
@@ -68,33 +68,35 @@ func (src amqpDataSource) Connect(ctx context.Context) error {
 			}
 		}
 
-		err = src.handleMessage(msg)
+		ok, err := src.handleMessage(msg)
 		if err != nil {
 			receiver.RejectMessage(ctx, msg, nil)
 		} else {
 			_ = receiver.AcceptMessage(ctx, msg)
+			if ok {
+				msgChan <- msg.GetData()
+			}
 		}
 	}
 }
 
-func (src amqpDataSource) handleMessage(msg *amqplib.Message) error {
+func (src amqpDataSource) handleMessage(msg *amqplib.Message) (bool, error) {
 	if msg == nil {
-		return nil
+		return false, nil
 	}
 
 	data := msg.GetData()
 	if data == nil {
-		return fmt.Errorf("no data")
+		return false, fmt.Errorf("no data")
 	}
 
 	var rawJson any
 	json.Unmarshal(data, &rawJson)
 	if rawJson == nil {
-		return fmt.Errorf("could not read data")
+		return false, fmt.Errorf("could not read data")
 	}
 
 	jsonData := rawJson.(map[string]any)
-	res := src.criteria.Evaluate(jsonData)
-	fmt.Printf("AMQP Result: %t\n", res)
-	return nil
+	res := src.config.Criteria.Evaluate(jsonData)
+	return res, nil
 }

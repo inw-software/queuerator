@@ -45,9 +45,9 @@ func main() {
 
 	amqpRegex := regexp.MustCompile("(?i)^amqp(?:s{0,1})*://")
 	mqttRegex := regexp.MustCompile("(?i)^mqtt(?:s{0,1})*://")
-	for _, a := range arr {
+	for _, msg := range arr {
 		var base baseConfig
-		err := json.Unmarshal(a, &base)
+		err := json.Unmarshal(msg, &base)
 		if err != nil {
 			panic(err)
 		}
@@ -55,8 +55,7 @@ func main() {
 		base.Protocol = strings.ToLower(strings.TrimSpace(base.Protocol))
 		isAmqp := base.Protocol == "amqp" || base.Protocol == "" && amqpRegex.MatchString(base.Url)
 		if isAmqp {
-			var amqpConf amqp.AMQPDataSourceConfig
-			err = json.Unmarshal(a, &amqpConf)
+			amqpConf, err := amqp.New(msg)
 			if err != nil {
 				panic(err)
 			}
@@ -66,8 +65,7 @@ func main() {
 
 		isMqtt := base.Protocol == "mqtt" || base.Protocol == "" && mqttRegex.MatchString(base.Url)
 		if isMqtt {
-			var mqttConf mqtt.MQTT3DataSourceConfig
-			err = json.Unmarshal(a, &mqttConf)
+			mqttConf, err := mqtt.New(msg)
 			if err != nil {
 				panic(err)
 			}
@@ -85,18 +83,23 @@ func main() {
 
 	fmt.Printf("Resolved %d data source%s.\n", len(conf), s)
 	ctx, cancel := context.WithCancel(context.Background())
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-	for _, a := range conf {
-		ds, err := a.CreateDataSource()
-		if err != nil {
-			fmt.Print(err)
-		}
+	exit := make(chan os.Signal, 1)
+	signal.Notify(exit, syscall.SIGINT, syscall.SIGTERM)
 
-		go ds.Connect(ctx)
+	msg := make(chan json.RawMessage)
+	for _, ds := range conf {
+		go ds.Connect(ctx, msg)
 	}
 
-	<-c
-	cancel()
-	time.Sleep(1000 * time.Millisecond)
+main:
+	for {
+		select {
+		case <-exit:
+			cancel()
+			time.Sleep(1000 * time.Millisecond)
+			break main
+		case m := <-msg:
+			fmt.Printf("Curation yielded message: %s", m)
+		}
+	}
 }

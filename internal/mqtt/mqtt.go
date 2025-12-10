@@ -10,46 +10,41 @@ import (
 	mqttlib3 "github.com/eclipse/paho.mqtt.golang"
 )
 
-type MQTT3DataSourceConfig struct {
+type mqtt3Config struct {
 	Url      string               `json:"url"`
 	Criteria config.CriteriaGroup `json:"criteria"`
 	ClientId string               `json:"clientId"`
 	Topics   []string             `json:"topics"`
 }
 
-var _ config.DataSourceConfig = (*MQTT3DataSourceConfig)(nil)
-
-func (c MQTT3DataSourceConfig) CreateDataSource() (config.DataSource, error) {
-	return mqtt3DataSource{
-		url:      c.Url,
-		criteria: c.Criteria,
-		clientId: c.ClientId,
-		topics:   c.Topics,
-	}, nil
-}
-
 type mqtt3DataSource struct {
-	url      string
-	criteria config.CriteriaGroup
-	clientId string
-	topics   []string
+	config mqtt3Config
 }
 
 var _ config.DataSource = mqtt3DataSource{}
 
-func (src mqtt3DataSource) Connect(ctx context.Context) error {
+func New(a json.RawMessage) (config.DataSource, error) {
+	src := mqtt3DataSource{}
+	err := json.Unmarshal(a, &src.config)
+	if err != nil {
+		return nil, err
+	}
+
+	return src, nil
+}
+
+func (src mqtt3DataSource) Connect(ctx context.Context, msgChan chan json.RawMessage) error {
 	l := log.Default()
 	l.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	opts := mqttlib3.NewClientOptions()
-	opts = opts.AddBroker(src.url)
-	opts = opts.SetClientID(src.clientId)
+	opts = opts.AddBroker(src.config.Url)
+	opts = opts.SetClientID(src.config.ClientId)
 
-	// close := make(chan int)
 	opts.SetConnectionNotificationHandler(func(c mqttlib3.Client, notification mqttlib3.ConnectionNotification) {
 		switch n := notification.(type) {
 		case mqttlib3.ConnectionNotificationConnected:
 			l.Printf("[NOTIFICATION] connected\n")
-			for _, topic := range src.topics {
+			for _, topic := range src.config.Topics {
 				token := c.Subscribe(topic, 0, nil)
 				token.Wait()
 				if token.Error() != nil {
@@ -94,12 +89,13 @@ func (src mqtt3DataSource) Connect(ctx context.Context) error {
 			var jsonData map[string]any
 			err := json.Unmarshal(data, &jsonData)
 			if err != nil {
-				l.Printf("mqtt err: %s\n", err.Error())
 				continue
 			}
 
-			res := src.criteria.Evaluate(jsonData)
-			l.Printf("MQTT Result: %t\n", res)
+			res := src.config.Criteria.Evaluate(jsonData)
+			if res {
+				msgChan <- data
+			}
 		}
 	}
 }
