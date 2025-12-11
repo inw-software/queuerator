@@ -43,28 +43,29 @@ func (src mqtt3DataSource) Connect(ctx context.Context, msgChan chan json.RawMes
 	opts.SetConnectionNotificationHandler(func(c mqttlib3.Client, notification mqttlib3.ConnectionNotification) {
 		switch n := notification.(type) {
 		case mqttlib3.ConnectionNotificationConnected:
-			l.Printf("[NOTIFICATION] connected\n")
+			// l.Printf("[NOTIFICATION] connected\n")
+			_ = n
 			for _, topic := range src.config.Topics {
 				token := c.Subscribe(topic, 0, nil)
 				token.Wait()
 				if token.Error() != nil {
-					l.Printf("failed to subscribe to topic \"%s\"\n", topic)
+					// l.Printf("failed to subscribe to topic \"%s\"\n", topic)
 					panic(token.Error())
 				} else {
-					l.Printf("subscribed to topic \"%s\"", topic)
+					// l.Printf("subscribed to topic \"%s\"", topic)
 				}
 			}
 
 		case mqttlib3.ConnectionNotificationConnecting:
-			l.Printf("[NOTIFICATION] connecting (isReconnect=%t) [%d]\n", n.IsReconnect, n.Attempt)
+			// l.Printf("[NOTIFICATION] connecting (isReconnect=%t) [%d]\n", n.IsReconnect, n.Attempt)
 		case mqttlib3.ConnectionNotificationFailed:
-			l.Printf("[NOTIFICATION] connection failed: %v\n", n.Reason)
+			// l.Printf("[NOTIFICATION] connection failed: %v\n", n.Reason)
 		case mqttlib3.ConnectionNotificationLost:
-			l.Printf("[NOTIFICATION] connection lost: %v\n", n.Reason)
+			// l.Printf("[NOTIFICATION] connection lost: %v\n", n.Reason)
 		case mqttlib3.ConnectionNotificationBroker:
-			l.Printf("[NOTIFICATION] broker connection: %s\n", n.Broker.String())
+			// l.Printf("[NOTIFICATION] broker connection: %s\n", n.Broker.String())
 		case mqttlib3.ConnectionNotificationBrokerFailed:
-			l.Printf("[NOTIFICATION] broker connection failed: %v [%s]\n", n.Reason, n.Broker.String())
+			// l.Printf("[NOTIFICATION] broker connection failed: %v [%s]\n", n.Reason, n.Broker.String())
 		}
 	})
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"regexp"
@@ -43,6 +43,7 @@ func main() {
 
 	conf := make(config.Config, 0)
 
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	amqpRegex := regexp.MustCompile("(?i)^amqp(?:s{0,1})*://")
 	mqttRegex := regexp.MustCompile("(?i)^mqtt(?:s{0,1})*://")
 	for _, msg := range arr {
@@ -55,7 +56,8 @@ func main() {
 		base.Protocol = strings.ToLower(strings.TrimSpace(base.Protocol))
 		isAmqp := base.Protocol == "amqp" || base.Protocol == "" && amqpRegex.MatchString(base.Url)
 		if isAmqp {
-			amqpConf, err := amqp.New(msg)
+			logger.Debug("found amqp connection in config", "url", base.Url)
+			amqpConf, err := amqp.New(msg, logger)
 			if err != nil {
 				panic(err)
 			}
@@ -65,6 +67,7 @@ func main() {
 
 		isMqtt := base.Protocol == "mqtt" || base.Protocol == "" && mqttRegex.MatchString(base.Url)
 		if isMqtt {
+			logger.Debug("found mqtt connection in config", "url", base.Url)
 			mqttConf, err := mqtt.New(msg)
 			if err != nil {
 				panic(err)
@@ -74,14 +77,6 @@ func main() {
 		}
 	}
 
-	var s string
-	if len(conf) == 1 {
-		s = ""
-	} else {
-		s = "s"
-	}
-
-	fmt.Printf("Resolved %d data source%s.\n", len(conf), s)
 	ctx, cancel := context.WithCancel(context.Background())
 	exit := make(chan os.Signal, 1)
 	signal.Notify(exit, syscall.SIGINT, syscall.SIGTERM)
@@ -99,7 +94,8 @@ main:
 			time.Sleep(1000 * time.Millisecond)
 			break main
 		case m := <-msg:
-			fmt.Printf("Curation yielded message: %s", m)
+			_ = m // TODO: forward this somewhere
+			// fmt.Printf("Curation yielded message: %s\n", m)
 		}
 	}
 }
